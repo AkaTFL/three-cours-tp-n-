@@ -1,0 +1,31 @@
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(circle at top, #1f2937 0%, #0f172a 55%, #020617 100%);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+canvas {
+  display: block;
+}
+
+.hint {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(8px);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
