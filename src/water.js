@@ -1,7 +1,6 @@
 import * as THREE from "three";
 
-export function createWaterSystem({ scene, camera, sunLight, size, getHeight }) {
-  const waterMaterial = new THREE.ShaderMaterial({
+export function createWaterSystem({ scene, camera, sunLight, size, getHeight, renderTarget }) {  const waterMaterial = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
       uCameraPos: { value: camera.position },
@@ -10,6 +9,9 @@ export function createWaterSystem({ scene, camera, sunLight, size, getHeight }) 
       uSunDir: { value: sunLight.position.clone().normalize() },
       uSunColor: { value: new THREE.Color(1.0, 0.9, 0.7) },
       uEnvMap: { value: scene.environment },
+
+      uSceneColor: { value: renderTarget.texture },
+      uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
     },
     vertexShader: `
         uniform float uTime;
@@ -58,59 +60,94 @@ export function createWaterSystem({ scene, camera, sunLight, size, getHeight }) 
         }
     `,
     fragmentShader: `
-      varying vec3 vWorldPos;
+        varying vec3 vWorldPos;
         varying vec3 vNormal;
         varying vec2 vUv;
 
-        uniform float uWaterLevel;
         uniform vec3 uCameraPos;
         uniform vec3 uDeepColor;
         uniform vec3 uShallowColor;
         uniform vec3 uSunDir;
         uniform vec3 uSunColor;
+
         uniform samplerCube uEnvMap;
+        uniform sampler2D uSceneColor;
+        uniform vec2 uResolution;
+
         uniform float uTime;
+        uniform float uWaterLevel;
 
         void main() {
-        vec3 normal = normalize(vNormal);
 
-        // 🌊 Micro-détails (petites vagues)
-        normal.x += sin(vWorldPos.x * 0.2 + uTime) * 0.001;
-        normal.z += cos(vWorldPos.z * 0.2 + uTime) * 0.001;
-        normal = normalize(normal);
+            vec3 normal = normalize(vNormal);
 
-        vec3 viewDir = normalize(uCameraPos - vWorldPos);
+            // 🌊 micro vagues
+            float micro = sin(vWorldPos.x * 0.05 + uTime * 0.05) *
+                        cos(vWorldPos.z * 0.05 + uTime * 0.05);
 
-        // 🌅 Fresnel réaliste
-        float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
+            normal += vec3(micro * 0.05, 0.0, micro * 0.05);
+            normal = normalize(normal);
 
-        // 🌊 Reflection avec distortion
-        vec3 reflectDir = reflect(-viewDir, normal);
-        reflectDir.xy += normal.xz * 0.2;
+            vec3 viewDir = normalize(uCameraPos - vWorldPos);
 
-        vec3 reflection = textureCube(uEnvMap, reflectDir).rgb;
+            // 🌅 Fresnel
+            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
 
-        // 🌊 Couleur eau (profondeur fake mais crédible)
-        float shallowFactor = clamp(1.0 - vWorldPos.y * 0.01, 0.0, 1.0);
-        vec3 waterColor = mix(uDeepColor, uShallowColor, shallowFactor);
+            // =========================
+            // 💧 REFRACTION (clé)
+            // =========================
 
-        // ☀️ Specular soleil (plus propre)
-        vec3 lightDir = normalize(uSunDir);
-        vec3 halfDir = normalize(viewDir + lightDir);
+            vec2 screenUV = (gl_FragCoord.xy / uResolution);
 
-        float spec = pow(max(dot(normal, halfDir), 0.0), 128.0);
-        vec3 specular = uSunColor * spec * 1.5;
+            // distortion eau
+            vec2 distortion = normal.xz * 0.05;
 
-        // 🎨 Couleur finale
-        vec3 color = mix(waterColor, reflection, fresnel * 0.7);
-        color += specular;
+            vec3 refracted = texture2D(uSceneColor, screenUV + distortion).rgb;
 
-        float terrainMask = step(vWorldPos.y, uWaterLevel + 0.2);
+            // =========================
+            // 🌊 REFLECTION
+            // =========================
 
-        // coupe l’eau si terrain au-dessus
-        if (terrainMask < 0.5) discard;
+            vec3 reflectDir = reflect(-viewDir, normal);
+            reflectDir.xy += normal.xz * 0.08;
 
-        gl_FragColor = vec4(color, 0.9);
+            vec3 reflection = textureCube(uEnvMap, reflectDir).rgb;
+
+            // =========================
+            // 🌊 PROFONDEUR FAKE
+            // =========================
+
+            float depthFactor = clamp((uWaterLevel - vWorldPos.y) * 0.05, 0.0, 1.0);
+
+            vec3 waterColor = mix(uShallowColor, uDeepColor, depthFactor);
+
+            // =========================
+            // ☀️ SPECULAIRE FIX
+            // =========================
+
+            vec3 lightDir = normalize(uSunDir);
+            vec3 halfDir = normalize(viewDir + lightDir);
+
+            float spec = pow(max(dot(normal, halfDir), 0.0), 48.0);
+            spec *= 0.6;
+
+            vec3 specular = uSunColor * spec;
+
+            // =========================
+            // 🎨 MIX FINAL
+            // =========================
+
+            vec3 base = mix(refracted, reflection, fresnel);
+
+            vec3 color = mix(base, waterColor, 0.4);
+            color += specular;
+
+            // transparence selon profondeur
+            float alpha = mix(0.4, 0.95, depthFactor);
+
+            if (vWorldPos.y > uWaterLevel + 0.2) discard;
+
+            gl_FragColor = vec4(color, alpha);
         }
     `,
     transparent: true,

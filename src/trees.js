@@ -21,8 +21,8 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
   const treeTextures = {
     color: loadTreeTexture(loader, "textures/others/arbres/vrai/color.jpg"),
     normal: loadTreeTexture(loader, "textures/others/arbres/vrai/normal.jpg"),
-    roughness: loadTreeTexture(loader, "textures/others/arbres/vrai/dd.png"),
-    ao: loadTreeTexture(loader, "textures/others/arbres/vrai/ciuxjb.jpg"),
+    roughness: loadTreeTexture(loader, "textures/others/arbres/vrai/roughness.png"),
+    ao: loadTreeTexture(loader, "textures/others/arbres/vrai/ao.jpg"),
   };
 
   Object.values(treeTextures).forEach((tex) => {

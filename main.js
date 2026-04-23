@@ -69,6 +69,15 @@ const terrainData = createTerrain({
   scale: 0.00025,
 });
 
+const renderTarget = new THREE.WebGLRenderTarget(
+  window.innerWidth,
+  window.innerHeight,
+  {
+    type: THREE.HalfFloatType,
+    colorSpace: THREE.SRGBColorSpace,
+  }
+);
+
 const { getHeight, noise, scale, height } = terrainData;
 
 createSkybox(scene);
@@ -101,6 +110,7 @@ const { waterMaterial } = createWaterSystem({
   sunLight,
   size: SIZE,
   getHeight,
+  renderTarget,
 });
 
 const godRays = createGodRayPipeline({ scene, camera, renderer, sunLight });
@@ -146,36 +156,43 @@ function isUnderWater(x, z) {
 }
 
 function animate() {
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
-  controls.update();
+    renderTarget.setSize(window.innerWidth, window.innerHeight);
+    waterMaterial.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
 
-  waterMaterial.uniforms.uTime.value += 0.03;
-  waterMaterial.uniforms.uCameraPos.value.copy(camera.position);
-  waterMaterial.uniforms.uSunDir.value.copy(sunLight.position).normalize();
+    controls.update();
 
-  const camPos = camera.position;
-  if (isOutsideMap(camPos)) {
-    grassNear.visible = false;
-    grassMid.visible = false;
-    grassNear.count = 0;
-    grassMid.count = 0;
-    grassHidden = true;
-  } else {
-    grassNear.visible = true;
-    grassMid.visible = true;
 
-    if (grassHidden || camPos.distanceTo(cameraLastGrassUpdate) > UPDATE_THRESHOLD) {
-      updateGrass(camera);
-      cameraLastGrassUpdate.copy(camPos);
-      grassHidden = false;
+    renderer.setRenderTarget(renderTarget);
+    renderer.render(scene, camera);
+
+    waterMaterial.uniforms.uTime.value += 0.03;
+    waterMaterial.uniforms.uCameraPos.value.copy(camera.position);
+    waterMaterial.uniforms.uSunDir.value.copy(sunLight.position).normalize();
+
+    const camPos = camera.position;
+    if (isOutsideMap(camPos)) {
+        grassNear.visible = false;
+        grassMid.visible = false;
+        grassNear.count = 0;
+        grassMid.count = 0;
+        grassHidden = true;
+    } else {
+        grassNear.visible = true;
+        grassMid.visible = true;
+
+        if (grassHidden || camPos.distanceTo(cameraLastGrassUpdate) > UPDATE_THRESHOLD) {
+        updateGrass(camera);
+        cameraLastGrassUpdate.copy(camPos);
+        grassHidden = false;
+        }
     }
-  }
 
-  godRays.render();
+    godRays.render();
 
-  fpsStats.update();
-  trisPanel.update(renderer.info.render.triangles, 5000000);
-}
+    fpsStats.update();
+    trisPanel.update(renderer.info.render.triangles, 5000000);
+    }
 
 animate();
