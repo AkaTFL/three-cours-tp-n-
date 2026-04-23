@@ -1,114 +1,146 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { ImprovedNoise } from "three/addons/math/ImprovedNoise.js";
-import { Sky } from "three/addons/objects/Sky.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+
+import Stats from "https://unpkg.com/three@0.157.0/examples/jsm/libs/stats.module.js";
+
+const stats = new Stats();
+stats.showPanel(0); // 0: fps, 1: ms, 2: mb
 
 // Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 
 // Camera
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  1,
-  20000
-);
-camera.position.set(0, 800, 1200);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 20000);
+camera.position.set(0, 8, 12);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// Light
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(500, 1000, 500);
-scene.add(light);
+// -------- LIGHTS (LUMIÈRE NATURELLE) --------
+
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+hemiLight.position.set(0, 500, 0);
+scene.add(hemiLight);
+
+const sunLight = new THREE.DirectionalLight(0xffffee, 1.5);
+sunLight.position.set(500, 1000, 500);
+sunLight.castShadow = true;
+
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 5000;
+
+const shadowDistance = 1500;
+sunLight.shadow.camera.left = -shadowDistance;
+sunLight.shadow.camera.right = shadowDistance;
+sunLight.shadow.camera.top = shadowDistance;
+sunLight.shadow.camera.bottom = -shadowDistance;
+sunLight.shadow.bias = -0.0005;
+
+scene.add(sunLight);
 
 // -------- TERRAIN --------
 const SIZE = 10000;
-const SEGMENTS = 1000; // augmente pour plus de détails
+const SEGMENTS = 1000;
 
-const geometry = new THREE.PlaneGeometry(
-  SIZE,
-  SIZE,
-  SEGMENTS,
-  SEGMENTS
-);
-
+const geometry = new THREE.PlaneGeometry(SIZE, SIZE, SEGMENTS, SEGMENTS);
 geometry.rotateX(-Math.PI / 2);
 
-// Perlin noise
 const noise = new ImprovedNoise();
+const scale = 0.002;
+const height = 120;
+
+function getHeight(x, z) {
+  return noise.noise(x * scale, z * scale, 0) * height;
+}
+
 const vertices = geometry.attributes.position;
-const scale = 0.002;   // fréquence du bruit
-const height = 120;    // amplitude
 
 for (let i = 0; i < vertices.count; i++) {
   const x = vertices.getX(i);
   const z = vertices.getZ(i);
-
-  const y =
-    noise.noise(x * scale, z * scale, 0) * height;
-
-  vertices.setY(i, y);
+  vertices.setY(i, getHeight(x, z));
 }
 
 geometry.computeVertexNormals();
 
 const loader = new THREE.TextureLoader();
 
-const roughnessMap = loader.load("textures/Grass001_Roughness.jpg");
-const normalMap = loader.load("textures/Grass001_Normal.jpg");
-const color = loader.load("textures/Grass001_Color.jpg");
+const terrain = new THREE.Mesh(
+  geometry,
+  new THREE.MeshStandardMaterial({
+    map: loader.load("textures/Grass001_Color.jpg"),
+    normalMap: loader.load("textures/Grass001_Normal.jpg"),
+    roughnessMap: loader.load("textures/Grass001_Roughness.jpg"),
+  })
+);
 
-// Repeat wrapping
-[roughnessMap, normalMap, color].forEach((tex) => {
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-
-  tex.repeat.set(10, 10);
-});
-
-// Material
-const material = new THREE.MeshStandardMaterial({
-  roughnessMap : roughnessMap,
-  normalMap: normalMap,
-  map: color,
-});
-
-const terrain = new THREE.Mesh(geometry, material);
+terrain.receiveShadow = true;
 scene.add(terrain);
 
-import { InstancedMesh, PlaneGeometry, MeshBasicMaterial, Object3D, TextureLoader, DoubleSide, MeshStandardMaterial } from "three";
+// -------- EAU --------
+const waterGeometry = new THREE.CircleGeometry(500, 64);
+
+const waterMaterial = new THREE.MeshStandardMaterial({
+  color: 0x3366aa,
+  transparent: true,
+  opacity: 0.7,
+  roughness: 0.2,
+  metalness: 0.3,
+});
+
+const water = new THREE.Mesh(waterGeometry, waterMaterial);
+
+const wx = 0;
+const wz = 0;
+const wy = getHeight(wx, wz) - 2;
+
+water.rotation.x = -Math.PI / 2;
+water.position.set(wx, wy, wz);
+
+scene.add(water);
+
+waterMaterial.onBeforeCompile = (shader) => {
+  shader.uniforms.time = { value: 0 };
+
+  shader.vertexShader = shader.vertexShader.replace(
+    "#include <begin_vertex>",
+    `
+    vec3 transformed = vec3(position);
+    transformed.z += sin(position.x * 0.05 + time) * 0.5;
+    transformed.x += cos(position.y * 0.05 + time) * 0.5;
+    `
+  );
+
+  waterMaterial.userData.shader = shader;
+};
 
 // -------- HERBE --------
-const grassTexture = new THREE.TextureLoader().load("textures/others/color.png");
-grassTexture.transparent = true;
+const GRASS_COUNT = 200000;
+const grassGeometry = new THREE.PlaneGeometry(10, 15);
+const GRASS_HEIGHT = 3;
 
-const GRASS_COUNT = 500000; // 🔥 réduit (beaucoup plus stable visuellement)
-
-const grassGeometry = new THREE.PlaneGeometry(10, 10);
-
-const grassMaterial = new THREE.MeshBasicMaterial({
-  map: grassTexture,
+const grassMaterial = new THREE.MeshStandardMaterial({
+  map: loader.load("textures/others/herbes/herbes.png"),
+  alphaTest: 0.5,
   transparent: true,
   side: THREE.DoubleSide,
   depthWrite: false,
 });
 
-const grassMesh = new THREE.InstancedMesh(
-  grassGeometry,
-  grassMaterial,
-  GRASS_COUNT
-);
-
+const grassMesh = new THREE.InstancedMesh(grassGeometry, grassMaterial, GRASS_COUNT);
 scene.add(grassMesh);
 
 const dummy = new THREE.Object3D();
@@ -116,16 +148,11 @@ const dummy = new THREE.Object3D();
 for (let i = 0; i < GRASS_COUNT; i++) {
   const x = (Math.random() - 0.5) * SIZE;
   const z = (Math.random() - 0.5) * SIZE;
+  const y = getHeight(x, z);
 
-  const y = noise.noise(x * scale, z * scale, 0) * height;
-
-  dummy.position.set(x, y, z);
-
-  dummy.rotation.x = Math.random() * 0.3 - 0.15;
-  dummy.rotation.y = Math.random() * Math.PI * 2;
-  dummy.rotation.z = Math.random() * 0.3 - 0.15;
-
-  const s = 0.6 + Math.random() * 1.2; // 🔥 plus propre
+  dummy.position.set(x, y + GRASS_HEIGHT / 2, z);
+  dummy.rotation.y = Math.random() * Math.PI;
+  const s = 1.5 + Math.random() * 2;
   dummy.scale.set(s, s, s);
 
   dummy.updateMatrix();
@@ -134,167 +161,251 @@ for (let i = 0; i < GRASS_COUNT; i++) {
 
 grassMesh.instanceMatrix.needsUpdate = true;
 
-const bushTexture = new THREE.TextureLoader().load("textures/others/BaseColor.png");
-bushTexture.transparent = true;
-
+// -------- BUISSON --------
 const BUSH_COUNT = 500;
-const FACES = 8;
+const FACES = 6;
+const BUSH_HEIGHT = 3;
 
-const bushGeometry = new THREE.PlaneGeometry(3, 3);
+const bushGeometry = new THREE.PlaneGeometry(2, 3);
 
-const bushMaterial = new THREE.MeshLambertMaterial({
-  map: bushTexture,
-  transparent: true,
+const bushMaterial = new THREE.MeshStandardMaterial({
+  map: loader.load("textures/others/buisson/buisson.png"),
   alphaTest: 0.5,
   side: THREE.DoubleSide,
+  depthWrite: false,
 });
 
-const bushMesh = new THREE.InstancedMesh(
-  bushGeometry,
-  bushMaterial,
-  BUSH_COUNT * FACES
-);
-
+const bushMesh = new THREE.InstancedMesh(bushGeometry, bushMaterial, BUSH_COUNT * FACES);
 scene.add(bushMesh);
 
-const buisson = new THREE.Object3D();
-
 let index = 0;
+const obj = new THREE.Object3D();
 
 for (let i = 0; i < BUSH_COUNT; i++) {
   const x = (Math.random() - 0.5) * SIZE;
   const z = (Math.random() - 0.5) * SIZE;
+  const y = getHeight(x, z);
 
-  const y = noise.noise(x * scale, z * scale, 0) * height;
-
-  const rotYBase = Math.random() * Math.PI * 2;
-
-  const s = 40 + Math.random() * 18; // 🔥 plus lisible + stable
+  const rot = Math.random() * Math.PI;
 
   for (let f = 0; f < FACES; f++) {
-    const angle = (Math.PI / 4) * f;
+    obj.position.set(x, y + BUSH_HEIGHT / 2, z);
+    obj.rotation.set(0, rot + (Math.PI / FACES) * f, 0);
+    obj.scale.setScalar(20);
 
-    buisson.position.set(x, y + 2.0, z); // 🔥 légèrement au-dessus de l’herbe
-
-    buisson.rotation.set(0, rotYBase + angle, 0);
-
-    buisson.scale.set(s, s, s);
-
-    buisson.updateMatrix();
-
-    bushMesh.setMatrixAt(index++, buisson.matrix);
+    obj.updateMatrix();
+    bushMesh.setMatrixAt(index++, obj.matrix);
   }
 }
 
 bushMesh.instanceMatrix.needsUpdate = true;
 
+// -------- SKYBOX --------
+const cubeTextureLoader = new THREE.CubeTextureLoader();
+const skyboxTexture = cubeTextureLoader.load([
+  "textures/skybox/px.jpg",
+  "textures/skybox/nx.jpg",
+  "textures/skybox/py.jpg",
+  "textures/skybox/ny.jpg",
+  "textures/skybox/pz.jpg",
+  "textures/skybox/nz.jpg",
+]);
 
-for (let i = 0; i < BUSH_COUNT; i++) {
-  const x = (Math.random() - 0.5) * SIZE;
-  const z = (Math.random() - 0.5) * SIZE;
+scene.background = skyboxTexture;
+scene.environment = skyboxTexture;
 
-  const y = noise.noise(x * scale, z * scale, 0) * height;
+// -------- TEXTURES UTILITAIRES --------
 
-  const rotYBase = Math.random() * Math.PI * 2;
-  const s = 30 + Math.random() * 45;
-
-  for (let f = 0; f < FACES; f++) {
-    const angle = (Math.PI / 8) * f;
-
-    buisson.position.set(x, y, z);
-
-    buisson.rotation.set(0, rotYBase + angle, 0);
-
-    buisson.scale.set(s, s, s);
-
-    buisson.updateMatrix();
-
-    bushMesh.setMatrixAt(index++, buisson.matrix);
-  }
+// FIX 1 : loadTreeTexture déclarée AVANT son utilisation (bonne pratique)
+function loadTreeTexture(path) {
+  const tex = loader.load(path);
+  tex.minFilter = THREE.LinearMipMapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = false;
+  return tex;
 }
 
-bushMesh.instanceMatrix.needsUpdate = true;
-
-const dummy2 = new Object3D();
-
-
-for (let i = 0; i < GRASS_COUNT; i++) {
-  const x = (Math.random() - 0.5) * SIZE;
-  const z = (Math.random() - 0.5) * SIZE;
-  // récupérer hauteur du terrain (approx via noise)
-  const y = noise.noise(x * scale, z * scale, 0) * height;
-  dummy2.position.set(x, y, z);
-  // rotation 3D aléatoire pour chaque brin d'herbe
-  dummy2.rotation.x = Math.random() * 0.3 - 0.15;
-  dummy2.rotation.y = Math.random() * Math.PI * 2;
-  dummy2.rotation.z = Math.random() * 0.3 - 0.15;
-  // variation de taille
-  const s = 0.8 + Math.random() * 10;
-  dummy2.scale.set(s, s, s);
-  dummy2.updateMatrix();
-  grassMesh.setMatrixAt(i, dummy2.matrix);
+function placeOnGround(object, x, z, scale = 1) {
+  const y = getHeight(x, z);
+  const box = new THREE.Box3().setFromObject(object);
+  const minY = box.min.y;
+  object.position.set(x, y - minY * scale, z);
 }
 
-// -------- SKY --------
-const sky = new Sky();
-sky.scale.setScalar(1000000);
-scene.add(sky);
+// -------- BRUIT / PENTE --------
 
-const sun = new THREE.Vector3();
+function forestNoise(x, z) {
+  return noise.noise(x * 0.0008, z * 0.0008, 10);
+}
 
-// paramètres du ciel
-const skyUniforms = sky.material.uniforms;
+function getSlope(x, z) {
+  const e = 2;
+  const hL = getHeight(x - e, z);
+  const hR = getHeight(x + e, z);
+  const hD = getHeight(x, z - e);
+  const hU = getHeight(x, z + e);
+  const dx = hR - hL;
+  const dz = hU - hD;
+  return Math.sqrt(dx * dx + dz * dz);
+}
 
-skyUniforms["turbidity"].value = 10;
-skyUniforms["rayleigh"].value = 2;
-skyUniforms["mieCoefficient"].value = 0.005;
-skyUniforms["mieDirectionalG"].value = 0.8;
+// -------- ARBRES (FIX 2 : tout dans une async function) --------
 
-// position du soleil
-const elevation = 25; // hauteur dans le ciel
-const azimuth = 180;
+async function initTrees() {
+  const gltfLoader = new GLTFLoader();
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
+  gltfLoader.setDRACOLoader(dracoLoader);
 
-const phi = THREE.MathUtils.degToRad(90 - elevation);
-const theta = THREE.MathUtils.degToRad(azimuth);
+  const treeTextures = {
+    color: loadTreeTexture("textures/others/arbres/vrai/color.png"),
+    normal: loadTreeTexture("textures/others/arbres/vrai/normal.png"),
+    roughness: loadTreeTexture("textures/others/arbres/vrai/roughness.png"),
+    ao: loadTreeTexture("textures/others/arbres/vrai/ao.png"),
+  };
 
-sun.setFromSphericalCoords(1, phi, theta);
-
-sky.material.uniforms["sunPosition"].value.copy(sun);
-
-const sunLight = new THREE.DirectionalLight(0xffffff, 2);
-sunLight.position.copy(sun.clone().multiplyScalar(1000));
-scene.add(sunLight);
-
-grassMesh.instanceMatrix.needsUpdate = true;
-
-const gltfLoader = new GLTFLoader();
-
-gltfLoader.load("textures/skybox/sky.glb", (gltf) => {
-  const skyBox = gltf.scene;
-
-  skyBox.scale.setScalar(5000);
-
-  skyBox.traverse((child) => {
-    if (child.isMesh) {
-      child.material.side = THREE.BackSide;
-    }
+  Object.values(treeTextures).forEach((tex) => {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
   });
 
-  scene.add(skyBox);
-});
+  // FIX 3 : await correctement dans une async function
+  const treeHigh = await new Promise((resolve, reject) => {
+    gltfLoader.load(
+      "textures/others/tree.glb",
+      (gltf) => resolve(gltf.scene),
+      undefined,
+      (err) => reject(err)
+    );
+  });
 
-// Resize
+  treeHigh.traverse((child) => {
+    if (!child.isMesh) return;
+
+    const geo = child.geometry;
+
+    if (geo.attributes.uv && !geo.attributes.uv2) {
+      geo.setAttribute("uv2", new THREE.BufferAttribute(geo.attributes.uv.array, 2));
+    }
+
+    // FIX 4 : depthWrite séparé selon si le mesh est transparent (feuilles) ou opaque (tronc)
+    // On utilise le nom du mesh pour distinguer — adapte "Leaves" au nom réel dans ton GLB
+    const isLeaves =
+      child.name.toLowerCase().includes("lea") ||
+      child.name.toLowerCase().includes("feuil") ||
+      child.name.toLowerCase().includes("foliage");
+
+    child.material = new THREE.MeshStandardMaterial({
+      map: treeTextures.color,
+      normalMap: treeTextures.normal,
+      roughnessMap: treeTextures.roughness,
+      aoMap: treeTextures.ao,
+      transparent: isLeaves,
+      alphaTest: isLeaves ? 0.5 : 0,
+      side: isLeaves ? THREE.DoubleSide : THREE.FrontSide,
+      depthWrite: !isLeaves, // ✅ FIX : tronc écrit dans le depth buffer, feuilles non
+      roughness: 1,
+      metalness: 0,
+    });
+
+    child.castShadow = true;
+    child.receiveShadow = true;
+  });
+
+  // Recalage pivot
+  const box = new THREE.Box3().setFromObject(treeHigh);
+  treeHigh.position.y -= box.min.y;
+
+  // -------- FORÊT --------
+  const TREE_COUNT = 2000;
+
+  for (let i = 0; i < TREE_COUNT; i++) {
+    let x = (Math.random() - 0.5) * SIZE;
+    let z = (Math.random() - 0.5) * SIZE;
+
+    const density = forestNoise(x, z);
+
+    if (density < 0.2) continue;
+    if (getSlope(x, z) > 15) continue;
+
+    const y = getHeight(x, z);
+
+    const tree = treeHigh.clone();
+
+    const treeScale = 50 + Math.random() * 60;
+    tree.scale.setScalar(treeScale);
+
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    tree.rotation.z = (Math.random() - 0.5) * 0.05;
+
+    tree.position.set(x, y, z);
+
+    tree.traverse((c) => {
+      if (c.isMesh) {
+        c.castShadow = true;
+        c.receiveShadow = true;
+      }
+    });
+
+    scene.add(tree);
+
+    // Clusters
+    if (Math.random() > 0.7) {
+      const clusterSize = 2 + Math.floor(Math.random() * 4);
+
+      for (let j = 0; j < clusterSize; j++) {
+        const offsetX = (Math.random() - 0.5) * 50;
+        const offsetZ = (Math.random() - 0.5) * 50;
+
+        const nx = x + offsetX;
+        const nz = z + offsetZ;
+        const ny = getHeight(nx, nz);
+
+        const t = treeHigh.clone();
+        const s = treeScale * (0.7 + Math.random() * 0.6);
+        t.scale.setScalar(s);
+        t.rotation.y = Math.random() * Math.PI * 2;
+        t.position.set(nx, ny, nz);
+
+        t.traverse((c) => {
+          if (c.isMesh) {
+            c.castShadow = true;
+            c.receiveShadow = true;
+          }
+        });
+
+        scene.add(t);
+      }
+    }
+  }
+}
+
+// Lancement — les erreurs de chargement seront affichées dans la console
+initTrees().catch((err) => console.error("Erreur chargement arbres :", err));
+
+// -------- RESIZE --------
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Animate
+// -------- ANIMATE --------
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  stats.update();
   renderer.render(scene, camera);
+
+  if (grassMaterial.userData.shader) {
+    grassMaterial.userData.shader.uniforms.time.value += 0.03;
+  }
+
+  if (waterMaterial.userData.shader) {
+    waterMaterial.userData.shader.uniforms.time.value += 0.02;
+  }
 }
 
 animate();
