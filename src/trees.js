@@ -145,8 +145,8 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
     billboard.position.set(0, 0, 0);
 
     lod.addLevel(high, 0);
-    lod.addLevel(mid, 2000);
-    lod.addLevel(billboard, 4000);
+    lod.addLevel(mid, 4000);
+    lod.addLevel(billboard, 8000);
     lod.position.set(x, y, z);
     scene.add(lod);
 
