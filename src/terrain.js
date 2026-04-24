@@ -25,10 +25,11 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
   const roughnessMap = loader.load("textures/sol/Grass001_Roughness.jpg");
 
   const colorMap2 = loader.load("textures/sol/rocks_ground_01_diff_2k.jpg");
-  const normalMap2 = loader.load("textures/sol/rocks_ground_01_nor_gl_2k.exr");
+  const normalMap2 = loader.load("textures/sol/rocks_ground_01_nor_gl_2k.jpg");
   const roughnessMap2 = loader.load("textures/sol/rocks_ground_01_rough_2k.jpg");
+  const diffuseMap2 = loader.load("textures/sol/rocks_ground_01_diff_2k.jpg");
 
-[colorMap2, normalMap2, roughnessMap2].forEach((tex) => {
+[colorMap2, normalMap2, roughnessMap2, diffuseMap2].forEach((tex) => {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
@@ -52,6 +53,7 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
       map2: { value: colorMap2 },
       normalMap2: { value: normalMap2 },
       roughnessMap2: { value: roughnessMap2 },
+      diffuseMap2: { value: diffuseMap2 },
 
       waterLevel: { value: 5.0 },      // niveau de l’eau
       blendStrength: { value: 20.0 },  // largeur du dégradé
@@ -79,7 +81,7 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
       uniform sampler2D map2;
       uniform sampler2D normalMap2;
       uniform sampler2D roughnessMap2;
-
+      uniform sampler2D diffuseMap2;
       uniform float waterLevel;
       uniform float blendStrength;
       uniform float repeat;
@@ -87,12 +89,26 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
       varying vec2 vUv;
       varying float vHeight;
 
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
       void main() {
-        vec2 uv = vUv * repeat;
+        vec2 tiledUv = vUv * repeat;
+        vec2 tileId = floor(tiledUv);
+        vec2 localUv = fract(tiledUv) - 0.5;
+
+        float angle = hash(tileId) * 6.28318530718;
+        float c = cos(angle);
+        float s = sin(angle);
+        mat2 rot = mat2(c, -s, s, c);
+
+        vec2 uv = rot * localUv + 0.5 + tileId;
 
         // textures
         vec4 col1 = texture2D(map1, uv);
         vec4 col2 = texture2D(map2, uv);
+        vec4 diffuse2 = texture2D(diffuseMap2, uv);
 
         // 💡 facteur de blend smooth
         float blend = smoothstep(
