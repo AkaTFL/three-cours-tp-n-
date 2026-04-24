@@ -20,9 +20,9 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
 
   const treeTextures = {
     color: loadTreeTexture(loader, "textures/others/arbres/vrai/color.jpg"),
-    normal: loadTreeTexture(loader, "textures/others/arbres/vrai/normal.jpg"),
-    roughness: loadTreeTexture(loader, "textures/others/arbres/vrai/roughness.png"),
-    ao: loadTreeTexture(loader, "textures/others/arbres/vrai/ao.jpg"),
+    normalMap: loadTreeTexture(loader, "textures/others/arbres/vrai/normal.jpg"),
+    roughnessMap: loadTreeTexture(loader, "textures/others/arbres/vrai/roughness.png"),
+    aoMap: loadTreeTexture(loader, "textures/others/arbres/vrai/ao.jpg"),
   };
 
   Object.values(treeTextures).forEach((tex) => {
@@ -109,8 +109,8 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
   for (let i = 0; i < TREE_COUNT; i++) {
     const x = (Math.random() - 0.5) * size;
     const z = (Math.random() - 0.5) * size;
-    const density = (forestNoise(x, z) + 1) / 2;
-    if (isUnderWater(x, z)) continue;
+    const density = (forestNoise(x, z) + 1);
+    if (isUnderWater(x-10, z-10)) continue;
 
     if (density < 0.5) continue;
     if (getSlope(x, z) > 15) continue;

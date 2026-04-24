@@ -35,6 +35,11 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
     map: colorMap,
     normalMap,
     roughnessMap,
+
+    roughness: 1.0,        // 👈 CRUCIAL (force mat)
+    metalness: 0.0,        // 👈 sol = non métallique
+
+    envMapIntensity: 1.0, // 👈 CRUCIAL (force mat) - pas d'impact sur les arbres, mais nécessaire pour que le terrain réagisse à l'environnement
   });
 
   const terrain = new THREE.Mesh(geometry, material);

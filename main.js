@@ -21,7 +21,7 @@ camera.position.set(0, 120, 180);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
+renderer.toneMappingExposure = 1.0;
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.shadowMap.enabled = true;
@@ -31,15 +31,15 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-const FOG_START = 1500;
-const FOG_END = 8000;
+const FOG_START = 800;
+const FOG_END = 1600;
 scene.fog = new THREE.Fog(0xffc58f, FOG_START, FOG_END);
 
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
 hemiLight.position.set(0, 500, 0);
 scene.add(hemiLight);
 
-const sunLight = new THREE.DirectionalLight(0xffffee, 1.5);
+const sunLight = new THREE.DirectionalLight(0xffffee, 1.0);
 sunLight.position.set(500, 150, 500);
 sunLight.color.set(0xffb56b);
 sunLight.castShadow = true;
@@ -89,7 +89,7 @@ const { grassNear, grassMid, grassMaterial, updateGrass } = createGrass({
   size: SIZE,
   fogStart: FOG_START,
   grassDensity: 500000,
-  radius: 1500,
+  radius: 400,
   isUnderWater, // 👈 AJOUT
 });
 

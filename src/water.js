@@ -90,31 +90,25 @@ export function createWaterSystem({ scene, camera, sunLight, size, getHeight, re
 
             vec3 viewDir = normalize(uCameraPos - vWorldPos);
 
-            // 🌅 Fresnel
-            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
-
             // =========================
-            // 💧 REFRACTION (clé)
+            // 🌅 FRESNEL (renforcé)
             // =========================
 
-            vec2 screenUV = (gl_FragCoord.xy / uResolution);
-
-            // distortion eau
-            vec2 distortion = normal.xz * 0.05;
-
-            vec3 refracted = texture2D(uSceneColor, screenUV + distortion).rgb;
+            float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 4.0);
 
             // =========================
-            // 🌊 REFLECTION
+            // 🌊 REFLECTION (principale)
             // =========================
 
             vec3 reflectDir = reflect(-viewDir, normal);
-            reflectDir.xy += normal.xz * 0.08;
+
+            // distortion pour casser l'effet miroir parfait
+            reflectDir.xy += normal.xz * 0.1;
 
             vec3 reflection = textureCube(uEnvMap, reflectDir).rgb;
 
             // =========================
-            // 🌊 PROFONDEUR FAKE
+            // 🌊 COULEUR EAU (profondeur)
             // =========================
 
             float depthFactor = clamp((uWaterLevel - vWorldPos.y) * 0.05, 0.0, 1.0);
@@ -122,14 +116,14 @@ export function createWaterSystem({ scene, camera, sunLight, size, getHeight, re
             vec3 waterColor = mix(uShallowColor, uDeepColor, depthFactor);
 
             // =========================
-            // ☀️ SPECULAIRE FIX
+            // ☀️ SPECULAIRE (plus visible)
             // =========================
 
             vec3 lightDir = normalize(uSunDir);
             vec3 halfDir = normalize(viewDir + lightDir);
 
-            float spec = pow(max(dot(normal, halfDir), 0.0), 48.0);
-            spec *= 0.6;
+            float spec = pow(max(dot(normal, halfDir), 0.0), 10.0);
+            spec *= 0.8;
 
             vec3 specular = uSunColor * spec;
 
@@ -137,14 +131,19 @@ export function createWaterSystem({ scene, camera, sunLight, size, getHeight, re
             // 🎨 MIX FINAL
             // =========================
 
-            vec3 base = mix(refracted, reflection, fresnel);
+            // sans réfraction → base = eau + reflection
+            vec3 base = mix(waterColor, reflection, fresnel);
 
-            vec3 color = mix(base, waterColor, 0.4);
-            color += specular;
+            // léger boost de contraste
+            base *= 1.1;
 
-            // transparence selon profondeur
-            float alpha = mix(0.4, 0.95, depthFactor);
+            // ajout specular
+            vec3 color = base + specular;
 
+            // transparence simulée (plus opaque sans réfraction)
+            float alpha = mix(0.6, 0.95, depthFactor);
+
+            // clipping surface
             if (vWorldPos.y > uWaterLevel + 0.2) discard;
 
             gl_FragColor = vec4(color, alpha);
