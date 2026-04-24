@@ -64,7 +64,7 @@ const terrainData = createTerrain({
   loader,
   size: SIZE,
   segments: 300,
-  repeat: 1000,
+  repeat: 100,
   height: 300,
   scale: 0.00025,
 });

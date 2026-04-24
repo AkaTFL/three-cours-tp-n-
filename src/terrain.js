@@ -34,12 +34,6 @@ export function createTerrain({ scene, renderer, loader, size = 10000, segments 
   tex.repeat.set(repeat, repeat);
 });
 
-  [colorMap2, normalMap2, roughnessMap2].forEach((tex) => {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(repeat, repeat);
-  });
-
     [colorMap, normalMap, roughnessMap].forEach((tex) => {
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
