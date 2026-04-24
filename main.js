@@ -182,7 +182,7 @@ function animate() {
         grassNear.visible = true;
         grassMid.visible = true;
 
-        if (grassHidden || camPos.distanceTo(cameraLastGrassUpdate) > UPDATE_THRESHOLD) {
+        if (grassHidden || camPos.distanceToSquared(cameraLastGrassUpdate) > UPDATE_THRESHOLD * UPDATE_THRESHOLD) {
         updateGrass(camera);
         cameraLastGrassUpdate.copy(camPos);
         grassHidden = false;

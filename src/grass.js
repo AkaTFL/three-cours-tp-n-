@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 export function createGrass({ scene, loader, getHeight, size, fogStart = 1500, grassDensity = 500000, radius = 1500, isUnderWater }) {
-  const grassGeometry = new THREE.PlaneGeometry(8, 15);
+  const grassGeometry = new THREE.PlaneGeometry(8, 20);
   const grassHeight = 3;
   const grassMaterial = new THREE.MeshStandardMaterial({
     map: loader.load("textures/others/herbes/herbes.png"),
@@ -42,7 +42,7 @@ function updateGrass(camera) {
   let nearIndex = 0;
   let midIndex = 0;
 
-  const step = 6; // ⚠️ légèrement irrégulier
+  const step = 6;
 
   const maxDistNear = fogStart;
   const maxDistMid = fogStart * 1.5;

@@ -89,7 +89,7 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
     const hU = getHeight(x, z + e);
     const dx = hR - hL;
     const dz = hU - hD;
-    return Math.sqrt(dx * dx + dz * dz);
+    return dx * dx + dz * dz;
   }
 
   const treeBillboardTexture = loader.load("textures/others/arbres/impostor/impostor.png");
@@ -105,7 +105,7 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
     return sprite;
   }
 
-  const TREE_COUNT = 1500;
+  const TREE_COUNT = 1000;
   for (let i = 0; i < TREE_COUNT; i++) {
     const x = (Math.random() - 0.5) * size;
     const z = (Math.random() - 0.5) * size;
@@ -113,7 +113,7 @@ export async function initTrees({ scene, loader, getHeight, size, noise, scale, 
     if (isUnderWater(x-10, z-10)) continue;
 
     if (density < 0.5) continue;
-    if (getSlope(x, z) > 15) continue;
+    if (getSlope(x, z) > 15 * 15) continue;
 
     const y = getHeight(x, z);
     const treeScale = 50 + Math.random() * 60;
